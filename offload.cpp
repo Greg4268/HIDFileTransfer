@@ -34,5 +34,11 @@ void deployScript() {
   Keyboard.press(KEY_RETURN);
   delay(100);
   Keyboard.releaseAll();
+
+  // minimize to system tray 
+  Keyboard.press(KEY_LEFT_GUI);
+  delay(100);
+  Keyboard.write(KEY_DOWN_ARROW);
+  Keyboard.releaseAll();
 }
 
