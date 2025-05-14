@@ -149,8 +149,10 @@ def list_files():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)get('AUTH_PASSWORD', "change_this_password"))
-}
+    app.run(host='0.0.0.0', port=port)
+
+AUTH_PASSWORD = os.environ.get('AUTH_PASSWORD', "change_this_password")
+
 
 @auth.verify_password
 def verify_password(username, password):
