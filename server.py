@@ -4,7 +4,12 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import os
 import time
+import logging
 from datetime import datetime
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Create Flask application
 app = Flask(__name__, template_folder='templates')
@@ -13,7 +18,7 @@ auth = HTTPBasicAuth()
 # Configuration
 app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_FILE_SIZE', 16 * 1024 * 1024))  # 16MB default
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24))
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24).hex())
 
 # Create upload directory if it doesn't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -29,95 +34,100 @@ def verify_password(username, password):
         return username
     return None
 
+# Simple test route that doesn't require auth
+@app.route('/ping')
+def ping():
+    return "Server is running!"
+
 # Home page
 @app.route('/')
 @auth.login_required
 def index():
-    files = []
-    for filename in os.listdir(app.config['UPLOAD_FOLDER']):
-        path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        if os.path.isfile(path):
-            size = os.path.getsize(path)
-            modified = datetime.fromtimestamp(os.path.getmtime(path))
-            files.append({
-                'name': filename,
-                'size': size,
-                'modified': modified.strftime('%Y-%m-%d %H:%M:%S')
-            })
-    return render_template('index.html', files=files)
+    logger.debug("Accessing index page")
+    try:
+        files = []
+        for filename in os.listdir(app.config['UPLOAD_FOLDER']):
+            path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            if os.path.isfile(path):
+                size = os.path.getsize(path)
+                modified = datetime.fromtimestamp(os.path.getmtime(path))
+                files.append({
+                    'name': filename,
+                    'size': size,
+                    'modified': modified.strftime('%Y-%m-%d %H:%M:%S')
+                })
+        logger.debug(f"Found {len(files)} files")
+        return render_template('index.html', files=files)
+    except Exception as e:
+        logger.error(f"Error in index route: {str(e)}")
+        return f"Error: {str(e)}", 500
 
 # File upload endpoint
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    # For API uploads (no auth required - compatible with your existing script)
-    if request.content_type and 'multipart/form-data' in request.content_type:
-        # Check if the post request has the file part
-        if 'file' not in request.files:
-            return jsonify({'error': 'No file part'}), 400
-        
-        file = request.files['file']
-        
-        # If user does not select file
-        if file.filename == '':
-            return jsonify({'error': 'No selected file'}), 400
-        
+    logger.debug("Upload endpoint called")
+    
+    # Check if the post request has the file part
+    if 'file' not in request.files:
+        logger.error("No file part in request")
+        return jsonify({'error': 'No file part'}), 400
+    
+    file = request.files['file']
+    logger.debug(f"File received: {file.filename}")
+    
+    # If user does not select file
+    if file.filename == '':
+        logger.error("Empty filename")
+        return jsonify({'error': 'No selected file'}), 400
+    
+    try:
         # Save the file with secure filename
         filename = secure_filename(file.filename)
         timestamp = int(time.time())
         unique_filename = f"{timestamp}_{filename}"
         
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+        logger.debug(f"Saving file to: {file_path}")
         file.save(file_path)
         
+        logger.debug("File saved successfully")
         return jsonify({
             'message': 'File uploaded successfully', 
             'filename': unique_filename
         }), 201
-    else:
-        # Require auth for browser-based uploads
-        if not auth.current_user():
-            return auth.login_required(lambda: None)()
-        
-        # Rest of upload handling (same as above)
-        if 'file' not in request.files:
-            return jsonify({'error': 'No file part'}), 400
-        
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({'error': 'No selected file'}), 400
-        
-        filename = secure_filename(file.filename)
-        timestamp = int(time.time())
-        unique_filename = f"{timestamp}_{filename}"
-        
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
-        file.save(file_path)
-        
-        # Redirect back to the index page after uploading
-        return redirect(url_for('index'))
+    except Exception as e:
+        logger.error(f"Error uploading file: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 # File download endpoint
 @app.route('/files/<filename>')
 @auth.login_required
 def get_file(filename):
+    logger.debug(f"Download requested for: {filename}")
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 # File list endpoint
 @app.route('/files', methods=['GET'])
 @auth.login_required
 def list_files():
-    files = []
-    for filename in os.listdir(app.config['UPLOAD_FOLDER']):
-        path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        if os.path.isfile(path):
-            size = os.path.getsize(path)
-            modified = datetime.fromtimestamp(os.path.getmtime(path))
-            files.append({
-                'name': filename,
-                'size': size,
-                'modified': modified.strftime('%Y-%m-%d %H:%M:%S')
-            })
-    return jsonify(files)
+    logger.debug("Listing files")
+    try:
+        files = []
+        for filename in os.listdir(app.config['UPLOAD_FOLDER']):
+            path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            if os.path.isfile(path):
+                size = os.path.getsize(path)
+                modified = datetime.fromtimestamp(os.path.getmtime(path))
+                files.append({
+                    'name': filename,
+                    'size': size,
+                    'modified': modified.strftime('%Y-%m-%d %H:%M:%S')
+                })
+        logger.debug(f"Found {len(files)} files")
+        return jsonify(files)
+    except Exception as e:
+        logger.error(f"Error listing files: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 # For running directly
 if __name__ == '__main__':
