@@ -16,9 +16,9 @@ app = Flask(__name__, template_folder='templates')
 auth = HTTPBasicAuth()
 
 # Configuration
-app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'uploads')
+app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', '/tmp/uploads')
 app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_FILE_SIZE', 16 * 1024 * 1024))  # 16MB default
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24).hex())
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_key_for_testing')
 
 # Create upload directory if it doesn't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -106,6 +106,48 @@ def get_file(filename):
     logger.debug(f"Download requested for: {filename}")
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
+# File delete endpoint
+@app.route('/delete/<filename>', methods=['POST'])
+@auth.login_required
+def delete_file(filename):
+    logger.debug(f"Delete requested for: {filename}")
+    try:
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        
+        # Check if file exists
+        if not os.path.exists(file_path):
+            logger.warning(f"File not found: {file_path}")
+            return jsonify({'error': 'File not found'}), 404
+            
+        # Delete the file
+        os.remove(file_path)
+        logger.info(f"File deleted: {filename}")
+        
+        # Redirect back to the index page
+        return redirect(url_for('index'))
+    except Exception as e:
+        logger.error(f"Error deleting file: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+#Delete all files endpoint
+@app.route('/delete_all', methods=['POST'])
+@auth.login_required
+def delete_all_files():
+    logger.debug("Delete all files requested")
+    try:
+        count = 0
+        for filename in os.listdir(app.config['UPLOAD_FOLDER']):
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+                count += 1
+                
+        logger.info(f"Deleted {count} files")
+        return redirect(url_for('index'))
+    except Exception as e:
+        logger.error(f"Error deleting all files: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 # File list endpoint
 @app.route('/files', methods=['GET'])
 @auth.login_required
@@ -129,7 +171,7 @@ def list_files():
         logger.error(f"Error listing files: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-# For running directly
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
+    logger.info(f"Starting server on port {port}")
+    app.run(host="0.0.0.0", port=port)
