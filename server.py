@@ -17,7 +17,7 @@ auth = HTTPBasicAuth()
 
 # Configuration
 app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', '/tmp/uploads')
-app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_FILE_SIZE', 16 * 1024 * 1024))  # 16MB default
+app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_FILE_SIZE', 32 * 1024 * 1024))  # 16MB default
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_key_for_testing')
 
 # Create upload directory if it doesn't exist
