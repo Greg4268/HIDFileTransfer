@@ -2,7 +2,7 @@
 
 > An educational project demonstrating Arduino-based HID automation for file transfers between Windows and web servers.
 
-![Arduino-to-Server](https://cdn.jsdelivr.net/gh/Greg4268/Arduino_HID_Testing@main/docs/header-image.png)
+![Arduino-to-Server](https://cdn.jsdelivr.net/gh/Greg4268/Arduino_HID_Testing@main/docs/webpage_image.png)
 
 ## 📚 Educational Purpose
 
