@@ -49,6 +49,8 @@ def check_api_key():
     """Check if API key is valid"""
     client_key = request.headers.get('X-API-Key')
     if client_key != api_key:
+        logger.info("client_key: ", client_key)
+        logger.info("api_key: ", api_key)
         abort(403)
 
 @auth.verify_password
