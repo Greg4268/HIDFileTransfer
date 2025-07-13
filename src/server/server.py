@@ -1,7 +1,6 @@
 from flask import Flask, request, abort, jsonify, render_template, redirect, url_for, send_from_directory
 from flask_httpauth import HTTPBasicAuth
 from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
@@ -26,8 +25,7 @@ auth = HTTPBasicAuth()
 
 # Create limiter AFTER app is defined
 limiter = Limiter(
-    app, 
-    key_func=get_remote_address,
+    app,
     default_limits=["200 per day", "50 per hour"]
 )
 
