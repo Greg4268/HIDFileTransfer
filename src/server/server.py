@@ -11,6 +11,14 @@ import sys
 import logging
 from datetime import datetime
 
+env_path = Path(__file__).resolve().parents[2] / '.env'
+load_dotenv(dotenv_path=env_path)
+api_key = os.getenv("API_KEY")
+
+# Validate API key is set
+if not api_key:
+    raise ValueError("API_KEY must be set in environment variables")
+
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -28,9 +36,10 @@ limiter = Limiter(
 # Configuration
 app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', '/tmp/uploads')
 app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_FILE_SIZE', 4 * 1024 * 1024))  # 4MB default
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
 api_key = os.environ.get('SECRET_KEY')
-if not api_key: 
-    raise ValueError("API_KEY must be set to value")
+    if not api_key: 
+        raise ValueError("NOT API KEY. CHeck environment configs")
 
 username = os.environ.get('AUTH_USERNAME')
 password = os.environ.get('AUTH_PASSWORD')
@@ -39,8 +48,7 @@ if not username or not password:
 users = {username: generate_password_hash(password)}
 
 # Approved file extensions
-# exclude txt so you don't get spammed! 
-approved_files = ('.png', '.jpg', '.jpeg', '.img', '.svg', '.mp3', '.mp4', '.xlsx', '.docx')
+approved_files = ('.png', '.jpg', '.jpeg', '.img', '.svg', '.mp3', '.mp4', '.txt', '.xlsx', '.docx')
 
 # Create upload directory if it doesn't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -48,9 +56,8 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 def check_api_key():
     """Check if API key is valid"""
     client_key = request.headers.get('X-API-Key')
-    if client_key != api_key:
-        logger.info("client_key: ", client_key)
-        logger.info("api_key: ", api_key)
+    if not client_key or not api_key or client_key != api_key:
+        logger.warning(f"API key check failed. Client key: {client_key[:10] + '...' if client_key else 'None'}")
         abort(403)
 
 @auth.verify_password
@@ -59,11 +66,11 @@ def verify_password(username, password):
         return username
     return None
 
-# Home page
+# Home page - only requires HTTP Basic Auth (for web interface)
 @app.route('/')
 @auth.login_required
 def index():
-    check_api_key()  # Explicitly check API key
+    # No API key check for web interface
     logger.debug("Accessing index page")
     try:
         files = []
@@ -133,12 +140,11 @@ def upload_file():
         logger.error(f"Error uploading file: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
-# File download endpoint
+# File download endpoint - only requires HTTP Basic Auth (for web interface)
 @app.route('/files/<filename>')
 @auth.login_required
 def get_file(filename):
-    check_api_key()  # Check API key
-    
+    # No API key check for web interface downloads
     logger.debug(f"Download requested for: {filename}")
     
     # Validate filename
@@ -161,12 +167,11 @@ def get_file(filename):
         
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
-# File delete endpoint
+# File delete endpoint - only requires HTTP Basic Auth (for web interface)
 @app.route('/delete/<filename>', methods=['POST'])
 @auth.login_required
 def delete_file(filename):
-    check_api_key()  # Check API key
-    
+    # No API key check for web interface
     logger.debug(f"Delete requested for: {filename}")
     
     # Validate filename
@@ -195,12 +200,11 @@ def delete_file(filename):
         logger.error(f"Error deleting file: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
-# Delete all files endpoint
+# Delete all files endpoint - only requires HTTP Basic Auth (for web interface)
 @app.route('/delete_all', methods=['POST'])
 @auth.login_required
 def delete_all_files():
-    check_api_key()  # Check API key
-    
+    # No API key check for web interface
     logger.debug("Delete all files requested")
     try:
         count = 0
