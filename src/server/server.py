@@ -1,11 +1,18 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for, send_from_directory
+from flask import Flask, request, abort, jsonify, render_template, redirect, url_for, send_from_directory
 from flask_httpauth import HTTPBasicAuth
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from dotenv import load_dotenv
+from pathlib import Path
 import os
 import time
+import sys
 import logging
 from datetime import datetime
+
+env_path = Path(__file__).resolve().parents[2] / '.env'
+load_dotenv(dotenv_path=env_path)
+api_key = os.getenv("API_KEY")
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -17,27 +24,29 @@ auth = HTTPBasicAuth()
 
 # Configuration
 app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', '/tmp/uploads')
-app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_FILE_SIZE', 32 * 1024 * 1024))  # 16MB default
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_key_for_testing')
+app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_FILE_SIZE', 4 * 1024 * 1024))  # 4MB default
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
+
+username = os.environ.get('AUTH_USERNAME')
+password = os.environ.get('AUTH_PASSWORD')
+if not username or not password: 
+    raise ValueError("AUTH_USERNAME and AUTH_PASSWORD must be set")
+users = {username: generate_password_hash(password)}
 
 # Create upload directory if it doesn't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Add basic authentication
-users = {
-    os.environ.get('AUTH_USERNAME', "admin"): generate_password_hash(os.environ.get('AUTH_PASSWORD', "change_this_password"))
-}
+@app.before_request
+def check_api_key():
+    client_key = request.headers.get('X-API-Key')
+    if client_key != api_key:
+        abort(403)
 
 @auth.verify_password
 def verify_password(username, password):
     if username in users and check_password_hash(users.get(username), password):
         return username
     return None
-
-# Simple test route that doesn't require auth
-@app.route('/ping')
-def ping():
-    return "Server is running!"
 
 # Home page
 @app.route('/')
@@ -79,6 +88,10 @@ def upload_file():
     if file.filename == '':
         logger.error("Empty filename")
         return jsonify({'error': 'No selected file'}), 400
+
+    if file.content_length > app.config['MAX_CONTENT_LENGTH']:
+        logger.error("File too big, ignoring")
+        return jsonify({'error': 'File too large'}), 413
     
     try:
         # Save the file with secure filename
