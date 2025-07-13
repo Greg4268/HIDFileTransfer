@@ -38,8 +38,8 @@ app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', '/tmp/uploads')
 app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_FILE_SIZE', 4 * 1024 * 1024))  # 4MB default
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
 api_key = os.environ.get('SECRET_KEY')
-    if not api_key: 
-        raise ValueError("NOT API KEY. CHeck environment configs")
+if not api_key: 
+    raise ValueError("NOT API KEY. CHeck environment configs")
 
 username = os.environ.get('AUTH_USERNAME')
 password = os.environ.get('AUTH_PASSWORD')
