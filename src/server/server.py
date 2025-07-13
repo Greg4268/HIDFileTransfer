@@ -41,7 +41,8 @@ if not username or not password:
 users = {username: generate_password_hash(password)}
 
 # Approved file extensions
-approved_files = ('.png', '.jpg', '.jpeg', '.img', '.svg', '.mp3', '.mp4', '.txt', '.xlsx', '.docx')
+# exclude txt so you don't get spammed! 
+approved_files = ('.png', '.jpg', '.jpeg', '.img', '.svg', '.mp3', '.mp4', '.xlsx', '.docx')
 
 # Create upload directory if it doesn't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
