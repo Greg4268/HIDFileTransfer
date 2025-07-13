@@ -1,5 +1,7 @@
 from flask import Flask, request, abort, jsonify, render_template, redirect, url_for, send_from_directory
 from flask_httpauth import HTTPBasicAuth
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
@@ -22,6 +24,13 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__, template_folder='../templates')
 auth = HTTPBasicAuth()
 
+# Create limiter AFTER app is defined
+limiter = Limiter(
+    app, 
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]
+)
+
 # Configuration
 app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', '/tmp/uploads')
 app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_FILE_SIZE', 4 * 1024 * 1024))  # 4MB default
@@ -33,11 +42,14 @@ if not username or not password:
     raise ValueError("AUTH_USERNAME and AUTH_PASSWORD must be set")
 users = {username: generate_password_hash(password)}
 
+# Approved file extensions
+approved_files = ('.png', '.jpg', '.jpeg', '.img', '.svg', '.mp3', '.mp4', '.txt', '.xlsx', '.docx')
+
 # Create upload directory if it doesn't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-@app.before_request
 def check_api_key():
+    """Check if API key is valid"""
     client_key = request.headers.get('X-API-Key')
     if client_key != api_key:
         abort(403)
@@ -52,6 +64,7 @@ def verify_password(username, password):
 @app.route('/')
 @auth.login_required
 def index():
+    check_api_key()  # Explicitly check API key
     logger.debug("Accessing index page")
     try:
         files = []
@@ -69,11 +82,14 @@ def index():
         return render_template('index.html', files=files)
     except Exception as e:
         logger.error(f"Error in index route: {str(e)}")
-        return f"Error: {str(e)}", 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 # File upload endpoint
 @app.route('/upload', methods=['POST'])
+@limiter.limit("5 per minute")
 def upload_file():
+    check_api_key()  # Check API key
+    
     logger.debug("Upload endpoint called")
     
     # Check if the post request has the file part
@@ -89,7 +105,13 @@ def upload_file():
         logger.error("Empty filename")
         return jsonify({'error': 'No selected file'}), 400
 
-    if file.content_length > app.config['MAX_CONTENT_LENGTH']:
+    # Check file extension
+    if not file.filename.lower().endswith(approved_files):
+        logger.debug("Unwanted file type sent for upload. Rejecting")
+        return jsonify({'error': 'Unwanted file type'}), 400
+
+    # Check file size
+    if file.content_length and file.content_length > app.config['MAX_CONTENT_LENGTH']:
         logger.error("File too big, ignoring")
         return jsonify({'error': 'File too large'}), 413
     
@@ -110,22 +132,54 @@ def upload_file():
         }), 201
     except Exception as e:
         logger.error(f"Error uploading file: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 # File download endpoint
 @app.route('/files/<filename>')
 @auth.login_required
 def get_file(filename):
+    check_api_key()  # Check API key
+    
     logger.debug(f"Download requested for: {filename}")
+    
+    # Validate filename
+    if not filename.lower().endswith(approved_files):
+        abort(400)
+    
+    # Check for path traversal
+    if '..' in filename or '/' in filename:
+        abort(400)
+
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    
+    # Ensure file is within upload directory
+    if not os.path.commonpath([file_path, app.config['UPLOAD_FOLDER']]) == app.config['UPLOAD_FOLDER']:
+        abort(400)
+    
+    # Check if file exists
+    if not os.path.exists(file_path):
+        abort(404)
+        
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 # File delete endpoint
 @app.route('/delete/<filename>', methods=['POST'])
 @auth.login_required
 def delete_file(filename):
+    check_api_key()  # Check API key
+    
     logger.debug(f"Delete requested for: {filename}")
+    
+    # Validate filename
+    if '..' in filename or '/' in filename:
+        abort(400)
+    
     try:
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        
+        # Ensure file is within upload directory
+        if not os.path.commonpath([file_path, app.config['UPLOAD_FOLDER']]) == app.config['UPLOAD_FOLDER']:
+            abort(400)
         
         # Check if file exists
         if not os.path.exists(file_path):
@@ -140,12 +194,14 @@ def delete_file(filename):
         return redirect(url_for('index'))
     except Exception as e:
         logger.error(f"Error deleting file: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
-#Delete all files endpoint
+# Delete all files endpoint
 @app.route('/delete_all', methods=['POST'])
 @auth.login_required
 def delete_all_files():
+    check_api_key()  # Check API key
+    
     logger.debug("Delete all files requested")
     try:
         count = 0
@@ -159,30 +215,29 @@ def delete_all_files():
         return redirect(url_for('index'))
     except Exception as e:
         logger.error(f"Error deleting all files: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
-# File list endpoint
-@app.route('/files', methods=['GET'])
-@auth.login_required
-def list_files():
-    logger.debug("Listing files")
-    try:
-        files = []
-        for filename in os.listdir(app.config['UPLOAD_FOLDER']):
-            path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            if os.path.isfile(path):
-                size = os.path.getsize(path)
-                modified = datetime.fromtimestamp(os.path.getmtime(path))
-                files.append({
-                    'name': filename,
-                    'size': size,
-                    'modified': modified.strftime('%Y-%m-%d %H:%M:%S')
-                })
-        logger.debug(f"Found {len(files)} files")
-        return jsonify(files)
-    except Exception as e:
-        logger.error(f"Error listing files: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+# Add security headers
+@app.after_request
+def after_request(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    return response
+
+# Error handlers
+@app.errorhandler(500)
+def internal_error(error):
+    logger.error(f"Internal error: {str(error)}")
+    return jsonify({'error': 'Internal server error'}), 500
+
+@app.errorhandler(403)
+def forbidden(error):
+    return jsonify({'error': 'Forbidden'}), 403
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'Not found'}), 404
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
